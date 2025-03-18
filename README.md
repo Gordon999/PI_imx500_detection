@@ -1,6 +1,6 @@
 # PI_imx500_detection
 
-Pi + Pi imx500 AI camera
+Pi + Pi imx500 AI camera. Tested on Pi4 and Pi5.
 
 It is a modified version of imx500_object_detection_demo.py
 
