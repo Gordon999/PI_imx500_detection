@@ -2,6 +2,8 @@
 
 """Based on imx500_object_detection_demo.py."""
 
+#v0.2
+
 import argparse
 import sys
 from functools import lru_cache
@@ -11,6 +13,7 @@ import os
 import time
 import datetime
 import glob
+import shutil
 from picamera2 import MappedArray, Picamera2, Preview
 from picamera2.devices import IMX500
 from picamera2.devices.imx500 import (NetworkIntrinsics,postprocess_nanodet_detection)
@@ -26,19 +29,28 @@ windowSurfaceObj = pygame.display.set_mode((320,450),1, 24)
 pygame.display.set_caption("Review Captures" ) 
 
 # detection objects
-objects   = ["cat","bear","clock","person"]
-threshold = 0.5
+objects      = ["cat","bear","clock","person"]
+threshold    = 0.5   # set detection threshold   
 
 # video settings
 v_width      = 1456  # video width
 v_height     = 1088  # video height
 v_length     = 5     # seconds
-show_detects = 0
+show_detects = 1     # show detections on video
 
-# canera settings
+# camera settings
 mode     = 1     # camera mode, 0-3 = manual,normal,short,long
 speed    = 1000  # manual shutter speed in mS
 gain     = 0     # set camera gain, 0 = auto
+led      = 21    # set gpio for recording led
+
+# shutdown time
+sd_hour  = 20    # hour
+sd_mins  = 0     # minute
+auto_sd  = 0     # set to 1 to shutdown at set time
+
+# ram limit
+ram_limit = 150  # stops recording if ram below this
 
 # initialise
 last_detections = []
@@ -49,7 +61,6 @@ user     = Users[0]
 h_user   = "/home/" + os.getlogin( )
 m_user = "/media/" + os.getlogin( )
 encoding = False
-led      = 21 
 rec_led  = LED(led)
 rec_led.off()
 mp4_timer = 10
@@ -60,14 +71,6 @@ origin    = (184, int(v_height - 35))
 font      = cv2.FONT_HERSHEY_SIMPLEX
 scale     = 1
 thickness = 2
-
-# shutdown time
-sd_hour = 20
-sd_mins = 0
-auto_sd = 0  # set to 1 to shutdown at set time
-
-# ram limit
-ram_limit = 150 # stops recording if ram below this
 
 config_file = "Det_Config02.txt"
 
@@ -369,7 +372,7 @@ if __name__ == "__main__":
                 now = datetime.datetime.now()
                 timestamp = now.strftime("%y%m%d_%H%M%S")
                 print("New  Detection",timestamp,label)
-                circular.open_output(PyavOutput(h_user + "/Videos/" + timestamp +".mp4"))
+                circular.open_output(PyavOutput("/run/shm/" + timestamp +".mp4"))
                 # save lores image
                 cv2.imwrite(h_user + "/Pictures/" + str(timestamp) + ".jpg",frame)
                 rec_led.on()
@@ -389,8 +392,9 @@ if __name__ == "__main__":
                 text("    ",100,100,100,163,15,18,70)
                 text("    ",100,100,100,243,15,18,70)
                 pygame.display.update()
-            # stop recording
+        # stop recording
         if encoding and (time.monotonic() - startrec > v_length):
+            time.sleep(5) 
             now = datetime.datetime.now()
             timestamp2 = now.strftime("%y%m%d_%H%M%S")
             print("Stopped Record", timestamp2)
