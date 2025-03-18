@@ -2,7 +2,24 @@
 
 """Based on imx500_object_detection_demo.py."""
 
-#v0.2
+"""Copyright (c) 2025
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE."""
+
+#v0.3
 
 import argparse
 import sys
@@ -341,7 +358,7 @@ if __name__ == "__main__":
     model_h, model_w = imx500.get_input_size()
     video_w, video_h = v_width,v_height
     main  = {'size': (video_w, video_h), 'format': 'YUV420'}
-    lores = {'size': (model_w, model_h), 'format': 'RGB888'}
+    lores = {'size': (model_w, model_h), 'format': 'YUV420'}
     picam2 = Picamera2(imx500.camera_num)
     config = picam2.create_preview_configuration(main, lores=lores,controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12)
     imx500.show_network_fw_progress_bar()
@@ -360,6 +377,8 @@ if __name__ == "__main__":
         last_results = parse_detections(picam2.capture_metadata())
         # capture frame
         frame = picam2.capture_array('lores')
+        frame = cv2.cvtColor(frame, cv2.COLOR_YUV420p2RGB)
+        frame = frame[0:320, 0:320]
         # detected label
         data = label.split("(")
         category = data[0][:-1]
