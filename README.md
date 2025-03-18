@@ -14,6 +14,8 @@ you can set the objects to detect in line 29, objects = ["cat","bear","bird"], t
 
 Copy imx500_detect_2.py into /home/USER/picamera2/examples/imx500
 
+sudo apt install python3-opencv -y
+
 Videos saved to ram and then copied to /home/USERNAME/Videos
 
 stills saved to /home/USER/Pictures
