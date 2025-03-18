@@ -19,7 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
-#v0.3
+#v0.4
 
 import argparse
 import sys
@@ -53,7 +53,8 @@ threshold    = 0.5   # set detection threshold
 v_width      = 1456  # video width
 v_height     = 1088  # video height
 v_length     = 5     # seconds
-show_detects = 1     # show detections on video
+show_detects = 0     # show detections on video
+mp4_anno     = 1     # annotate date & time on mp4
 
 # camera settings
 mode     = 1     # camera mode, 0-3 = manual,normal,short,long
@@ -147,7 +148,7 @@ if gain != 0:
 else:
     text("Auto",100,100,100,250,420,18,60)
 text("Please wait...",100,100,100,10,60,18,60)
-time.sleep(10)
+#time.sleep(10)
 text("",100,100,100,10,60,18,100)
 
 # show last captured image
@@ -172,26 +173,12 @@ if len(Pics) > 0:
     pygame.display.update()
 pygame.display.update()
 
-
 class Detection:
     def __init__(self, coords, category, conf, metadata):
         """Create a Detection object, recording the bounding box, category and confidence."""
         self.category = category
         self.conf = conf
         self.box = imx500.convert_inference_coords(coords, metadata, picam2)
-
-# apply timestamp to videos
-def apply_timestamp(request):
-  global mp4_anno
-  if mp4_anno == 1:
-      timestamp = time.strftime("%Y/%m/%d %T")
-      with MappedArray(request, "main") as m:
-          lst = list(origin)
-          lst[0] += 365
-          lst[1] -= 20
-          end_point = tuple(lst)
-          cv2.rectangle(m.array, origin, end_point, (0,0,0), -1) 
-          cv2.putText(m.array, timestamp, origin, font, scale, colour, thickness)
 
 def Camera_Version():
     global cam1
@@ -255,7 +242,7 @@ def get_labels():
 
 def draw_detections(request, stream="main"):
     """Draw the detections for this request onto the ISP output."""
-    global label,show_detects
+    global label,show_detects, mp4_anno
     detections = last_results
     if detections is None:
         return
@@ -295,7 +282,16 @@ def draw_detections(request, stream="main"):
             color = (255, 0, 0)  # red
             cv2.putText(m.array, "ROI", (b_x + 5, b_y + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
             cv2.rectangle(m.array, (b_x, b_y), (b_x + b_w, b_y + b_h), (255, 0, 0, 0))
-
+    # apply timestamp to video
+    if mp4_anno == 1:
+        timestamp = time.strftime("%Y/%m/%d %T")
+        with MappedArray(request, "main") as m:
+            lst = list(origin)
+            lst[0] += 365
+            lst[1] -= 20
+            end_point = tuple(lst)
+            cv2.rectangle(m.array, origin, end_point, (0,0,0), -1) 
+            cv2.putText(m.array, timestamp, origin, font, scale, colour, thickness)
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -365,7 +361,6 @@ if __name__ == "__main__":
     picam2.configure(config)
     encoder = H264Encoder(bitrate=2000000)
     circular = CircularOutput2(buffer_duration_ms=5000)
-    picam2.pre_callback = apply_timestamp
     picam2.start_preview(Preview.QTGL, x=0, y=0, width=480, height=480)
     picam2.start_recording(encoder, circular)
     if intrinsics.preserve_aspect_ratio:
@@ -373,6 +368,7 @@ if __name__ == "__main__":
 
     last_results = None
     picam2.pre_callback = draw_detections
+
     while True:
         last_results = parse_detections(picam2.capture_metadata())
         # capture frame
