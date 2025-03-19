@@ -19,7 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
-#v0.4
+#v0.5
 
 import argparse
 import sys
@@ -55,6 +55,7 @@ v_height     = 1088  # video height
 v_length     = 5     # seconds
 show_detects = 0     # show detections on video
 mp4_anno     = 1     # annotate date & time on mp4
+pre_frames   = 5     # seconds, defines length of pre-detection buffer (1,2,3,5 or 10)
 
 # camera settings
 mode     = 1     # camera mode, 0-3 = manual,normal,short,long
@@ -77,11 +78,12 @@ Users    = []
 Users.append(os.getlogin())
 user     = Users[0]
 h_user   = "/home/" + os.getlogin( )
-m_user = "/media/" + os.getlogin( )
+m_user   = "/media/" + os.getlogin( )
 encoding = False
 rec_led  = LED(led)
 rec_led.off()
-mp4_timer = 10
+mp4_timer  = 10
+pre_frames = int(pre_frames)
 
 # mp4_annotation parameters
 colour    = (255, 255, 255)
@@ -360,7 +362,16 @@ if __name__ == "__main__":
     imx500.show_network_fw_progress_bar()
     picam2.configure(config)
     encoder = H264Encoder(bitrate=2000000)
-    circular = CircularOutput2(buffer_duration_ms=5000)
+    if pre_frames < 2:
+        circular = CircularOutput2(buffer_duration_ms=1000)
+    elif pre_frames < 3:
+        circular = CircularOutput2(buffer_duration_ms=2000)
+    elif pre_frames < 4:
+        circular = CircularOutput2(buffer_duration_ms=3000)
+    elif pre_frames < 10:
+        circular = CircularOutput2(buffer_duration_ms=5000)
+    elif pre_frames >= 10:
+        circular = CircularOutput2(buffer_duration_ms=10000)
     picam2.start_preview(Preview.QTGL, x=0, y=0, width=480, height=480)
     picam2.start_recording(encoder, circular)
     if intrinsics.preserve_aspect_ratio:
@@ -408,7 +419,7 @@ if __name__ == "__main__":
                 text("    ",100,100,100,243,15,18,70)
                 pygame.display.update()
         # stop recording
-        if encoding and (time.monotonic() - startrec > v_length + 5):
+        if encoding and (time.monotonic() - startrec > v_length + pre_frames):
             now = datetime.datetime.now()
             timestamp2 = now.strftime("%y%m%d_%H%M%S")
             print("Stopped Record", timestamp2)
