@@ -19,7 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
-#v0.5
+#v0.7
 
 import argparse
 import sys
@@ -50,12 +50,19 @@ objects      = ["cat","bear","clock","person"]
 threshold    = 0.5   # set detection threshold   
 
 # video settings
-v_width      = 1456  # video width
-v_height     = 1088  # video height
+v_width      = 2028  # video width
+v_height     = 1520  # video height
 v_length     = 5     # seconds
+pre_frames   = 5     # seconds, defines length of pre-detection buffer (1,2,3,5 or 10)
 show_detects = 0     # show detections on video
 mp4_anno     = 1     # annotate date & time on mp4
-pre_frames   = 5     # seconds, defines length of pre-detection buffer (1,2,3,5 or 10)
+
+# mp4_annotation parameters
+colour    = (255, 255, 255)
+origin    = (184, int(v_height - 35))
+font      = cv2.FONT_HERSHEY_SIMPLEX
+scale     = 2
+thickness = 3
 
 # camera settings
 mode     = 1     # camera mode, 0-3 = manual,normal,short,long
@@ -84,13 +91,6 @@ rec_led  = LED(led)
 rec_led.off()
 mp4_timer  = 10
 pre_frames = int(pre_frames)
-
-# mp4_annotation parameters
-colour    = (255, 255, 255)
-origin    = (184, int(v_height - 35))
-font      = cv2.FONT_HERSHEY_SIMPLEX
-scale     = 1
-thickness = 2
 
 config_file = "Det_Config02.txt"
 
@@ -150,7 +150,6 @@ if gain != 0:
 else:
     text("Auto",100,100,100,250,420,18,60)
 text("Please wait...",100,100,100,10,60,18,60)
-#time.sleep(10)
 text("",100,100,100,10,60,18,100)
 
 # show last captured image
@@ -181,21 +180,6 @@ class Detection:
         self.category = category
         self.conf = conf
         self.box = imx500.convert_inference_coords(coords, metadata, picam2)
-
-def Camera_Version():
-    global cam1
-    if os.path.exists('/run/shm/libcams.txt'):
-        os.rename('/run/shm/libcams.txt', '/run/shm/oldlibcams.txt')
-    os.system("rpicam-vid --list-cameras >> /run/shm/libcams.txt")
-    time.sleep(0.5)
-    # read libcams.txt file
-    camstxt = []
-    with open("/run/shm/libcams.txt", "r") as file:
-        line = file.readline()
-        while line:
-            camstxt.append(line.strip())
-            line = file.readline()
-    cam1 = camstxt[2][4:10]
     
 def parse_detections(metadata: dict):
     """Parse the output tensor into a number of detected objects, scaled to the ISP output."""
@@ -244,7 +228,7 @@ def get_labels():
 
 def draw_detections(request, stream="main"):
     """Draw the detections for this request onto the ISP output."""
-    global label,show_detects, mp4_anno
+    global label,show_detects, mp4_anno,scale
     detections = last_results
     if detections is None:
         return
@@ -289,8 +273,8 @@ def draw_detections(request, stream="main"):
         timestamp = time.strftime("%Y/%m/%d %T")
         with MappedArray(request, "main") as m:
             lst = list(origin)
-            lst[0] += 365
-            lst[1] -= 20
+            lst[0] += scale * 365
+            lst[1] -= scale * 20
             end_point = tuple(lst)
             cv2.rectangle(m.array, origin, end_point, (0,0,0), -1) 
             cv2.putText(m.array, timestamp, origin, font, scale, colour, thickness)
@@ -348,9 +332,6 @@ if __name__ == "__main__":
     if args.print_intrinsics:
         print(intrinsics)
         exit()
-
-    # get camera version
-    Camera_Version()
 
     # Configure and start Picamera2.
     model_h, model_w = imx500.get_input_size()
