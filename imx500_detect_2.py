@@ -408,8 +408,7 @@ if __name__ == "__main__":
                 text("    ",100,100,100,243,15,18,70)
                 pygame.display.update()
         # stop recording
-        if encoding and (time.monotonic() - startrec > v_length):
-            time.sleep(5) 
+        if encoding and (time.monotonic() - startrec > v_length + 5):
             now = datetime.datetime.now()
             timestamp2 = now.strftime("%y%m%d_%H%M%S")
             print("Stopped Record", timestamp2)
