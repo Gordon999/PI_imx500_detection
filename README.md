@@ -10,7 +10,7 @@ v_width and v_height are set for a Pi GS camera, you may need to change to suit 
 
 Runs a pre-capture buffer of 1,2,3,5 or 10 seconds
 
-you can set the objects to detect in line 29, objects = ["cat","bear","bird"], the objects must be in coco.txt file
+you can set the objects to detect in line 49, objects = ["cat","bear","bird"], the objects must be in coco.txt file
 
 Copy imx500_detect_2.py into /home/USER/picamera2/examples/imx500
 
