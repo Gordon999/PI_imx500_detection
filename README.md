@@ -12,7 +12,7 @@ Runs a pre-capture buffer of 1,2,3,5 or 10 seconds
 
 you can set the objects to detect in line 49, objects = ["cat","bear","bird"], the objects must be in coco_labels.txt file
 
-Copy imx500_detect_2.py into /home/USER/picamera2/examples/imx500
+Copy imx500_detect_3.py into /home/USER/picamera2/examples/imx500
 
 sudo apt install python3-opencv -y
 
