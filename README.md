@@ -6,8 +6,6 @@ It is a modified version of imx500_object_detection_demo.py
 
 Captures videos as .mp4 videos
 
-v_width and v_height are set for a Pi GS camera, you may need to change to suit other cameras ....
-
 Runs a pre-capture buffer of 1,2,3,5 or 10 seconds
 
 you can set the objects to detect in line 49, objects = ["cat","bear","bird"], the objects must be in coco_labels.txt file
