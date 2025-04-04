@@ -20,4 +20,4 @@ Videos saved to ram and then copied to /home/USERNAME/Videos
 
 stills saved to /home/USER/Pictures
 
-to run ... python3 imx500_detect_2.py
+to run ... python3 imx500_detect_3.py
