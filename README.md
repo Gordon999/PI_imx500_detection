@@ -12,7 +12,7 @@ Captures videos as .mp4 videos
 
 Runs a pre-capture buffer
 
-you can set the objects to detect in line 49, objects = ["cat","bear","bird"], the objects must be in coco_labels.txt file
+you can set the objects to detect in line 46, objects = ["cat","bear","bird"], the objects must be in coco_labels.txt file
 
 Copy imx500_detect_3.py into /home/USER/picamera2/examples/imx500
 
