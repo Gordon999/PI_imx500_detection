@@ -6,7 +6,7 @@ It is a modified version of imx500_object_detection_demo.py
 
 Captures videos as .mp4 videos
 
-Runs a pre-capture buffer of 1,2,3,5 or 10 seconds
+Runs a pre-capture buffer
 
 you can set the objects to detect in line 49, objects = ["cat","bear","bird"], the objects must be in coco_labels.txt file
 
