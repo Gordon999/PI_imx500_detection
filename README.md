@@ -2,6 +2,10 @@
 
 Pi + Pi imx500 AI camera. Tested on Pi4 and Pi5
 
+## Screenshot...
+
+![screenshot](screenshot.jpg)
+
 It is a modified version of imx500_object_detection_demo.py
 
 Captures videos as .mp4 videos
