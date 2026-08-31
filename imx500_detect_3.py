@@ -2,7 +2,7 @@
 
 """Example module for Hailo Detection."""
 
-"""Copyright (c) 2025
+"""Copyright (c) 2026
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -19,7 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
-# v0.80
+# v0.81
 
 import argparse
 from functools import lru_cache
@@ -35,29 +35,32 @@ import time
 import os
 import glob
 import datetime
+from datetime import timedelta
 import shutil
 from gpiozero import LED
 import pygame, sys
 from pygame.locals import *
 
+# set threshold level for detection
 threshold = 0.5
 
 # detection objects
-objects = ["cat","bear","dog","clock","person"]
+objects = ["cat","bear","dog","person"]
 
 # shutdown time
 sd_hour      = 0     # if sd_hour = 0 and sd_mins = 0 won't shutdown
 sd_mins      = 0
 
 # set variables
-screen       = 1     # 1 = 1280 x 720, 2 = 800 x 480
+screen       = 2     # 1 = 1280 x 720, 2 = 800 x 480
 show_detects = 0     # show detections, 1 = yes, 0 = no
 log          = 0     # set to 1 to make a log of detections in detect_log.txt
-v_width      = 1088  # video width
-v_height     = 1088  # video height
+v_width      = 1080  # video width
+v_height     = 1080  # video height
 v_length     = 15    # seconds, minimum video length
 pre_frames   = 5     # seconds, defines length of pre-detection buffer
 fps          = 30    # video frame rate
+bitrate1     = 8     # video bitrate in MB
 mp4_timer    = 10    # seconds, move mp4s to SD card after this time if no detections
 mp4_anno     = 1     # show timestamps on video, 1 = yes, 0 = no
 led          = 21    # recording led gpio
@@ -104,7 +107,7 @@ if screen == 1: # 1280 x 720
 else: # 800 x 480
     bw = 53
     bh = 30
-    ft = 12
+    ft = 11
     rw = 320
     rh = 320
     cw = 480
@@ -121,9 +124,9 @@ windowSurfaceObj = pygame.display.set_mode((rw,ch),1, 24)
 pygame.display.set_caption("Review Captures" )
 
 # check Det_configXX.txt exists, if not then write default values
-config_file = "Det_Config5.txt"
+config_file = "Det_Config6.txt"
 if not os.path.exists(config_file):
-    defaults = [mode,speed,gain,meter,brightness,contrast,ev,sharpness,saturation,awb,red,blue,sd_hour,sd_mins,pre_frames,v_length]
+    defaults = [mode,speed,gain,meter,brightness,contrast,ev,sharpness,saturation,awb,red,blue,sd_hour,sd_mins,pre_frames,v_length,bitrate1]
     with open(config_file, 'w') as f:
         for item in defaults:
             f.write("%s\n" % item)
@@ -152,6 +155,9 @@ sd_hour    = defaults[12]
 sd_mins    = defaults[13]
 pre_frames = defaults[14]
 v_length   = defaults[15]
+bitrate    = defaults[16]
+
+bitrate2 = bitrate1 * 1000000
 
 # define colors
 global greyColor, dgryColor, whiteColor, redColor, greenColor,yellowColor,dredColor
@@ -193,7 +199,7 @@ def text(col,row,line,bColor,msg):
             pygame.draw.rect(windowSurfaceObj,(130,0,0),Rect(bx+2,by+2,bw - 4,ft))
         elif msg == "________":
             pygame.draw.rect(windowSurfaceObj,(130,0,0),Rect(bx+2,by+2,bw - 4,ft))
-        elif (row == 12 and col == 0) or (row == 12 and col == 5):
+        elif row == 12 and col == 0:
             pygame.draw.rect(windowSurfaceObj,(10,0,0),Rect(bx+2,by+2,bw - 3,ft))
         else:
             pygame.draw.rect(windowSurfaceObj,(130,130,130),Rect(bx+2,by+2,bw - 4,ft))
@@ -205,7 +211,7 @@ def text(col,row,line,bColor,msg):
         fontObj = pygame.font.Font(None,ft)
     msgSurfaceObj = fontObj.render(msg, False, (Color))
     msgRectobj = msgSurfaceObj.get_rect()
-    msgRectobj.topleft = (bx + 5,by)
+    msgRectobj.topleft = (bx + 5,by + 2)
     windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
     pygame.display.update()
 
@@ -229,6 +235,7 @@ Pics.sort()
 record = 0
 sd_tim = (sd_hour * 60) + sd_mins
 mrecord = 0
+old_label = ""
 
 # check if clock synchronised
 if "System clock synchronized: yes" in os.popen("timedatectl").read().split("\n"):
@@ -243,7 +250,7 @@ for y in range(0,6):
     button(y,15,bw,bh,0)
 if screen == 1:
     pygame.draw.rect(windowSurfaceObj,(130,130,130),Rect(0,rh + bh,rw,bh))
-for y in range(1,5):
+for y in range(1,6):
     button(y,13,bw,bh,0)
 
 text(0,0,1,5,"< PREV")
@@ -295,6 +302,8 @@ text(3,13,0,5,"Pre S")
 text(3,13,2,4,str(pre_frames))
 text(4,13,0,5,"Video S")
 text(4,13,2,4,str(v_length))
+text(5,13,0,5,"Bitrate")
+text(5,13,2,4,str(bitrate1))
 time.sleep(10)
 
 # show last captured image
@@ -342,6 +351,10 @@ def Camera_Version():
             camstxt.append(line.strip())
             line = file.readline()
     cam1 = camstxt[2][4:10]
+    if cam1 != "imx500":
+        print("Can't find a imx500 Camera !!")
+        pygame.display.quit()
+        sys.exit()
     
 class Detection:
     def __init__(self, coords, category, conf, metadata):
@@ -403,6 +416,7 @@ def draw_detections(request, stream="main"):
         return
     labels = get_labels()
     with MappedArray(request, stream) as m:
+        label = ""
         for detection in detections:
             x, y, w, h = detection.box
             label = f"{labels[int(detection.category)]} ({detection.conf:.2f})"
@@ -469,7 +483,28 @@ def get_args():
     parser.add_argument("--print-intrinsics", action="store_true",
                         help="Print JSON network_intrinsics then exit")
     return parser.parse_args()
-        
+ 
+def start_buffer():
+    global imx500,v_width,vheight,picam2,config,encoder,pref,pre_frames,bitrate2,cw,ch,circular,last_results,draw_detections,model_h,model_w
+    # Configure and start Picamera2.
+    model_h, model_w = imx500.get_input_size()
+    video_w, video_h = v_width,v_height
+    main  = {'size': (video_w, video_h), 'format': 'YUV420'}
+    lores = {'size': (model_w, model_h), 'format': 'YUV420'}
+    picam2 = Picamera2(imx500.camera_num)
+    config = picam2.create_preview_configuration(main, lores=lores,controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12)
+    imx500.show_network_fw_progress_bar()
+    picam2.configure(config)
+    encoder = H264Encoder(bitrate=bitrate2)
+    pref = pre_frames * 1000
+    circular = CircularOutput2(buffer_duration_ms=pref)
+    picam2.start_preview(Preview.QTGL, x=ds, y=1, width=cw, height=ch)
+    picam2.start_recording(encoder, circular)
+    if intrinsics.preserve_aspect_ratio:
+        imx500.set_auto_aspect_ratio()
+    last_results = None
+    picam2.pre_callback = draw_detections
+    
 # main loop
 if __name__ == "__main__":
 
@@ -506,26 +541,9 @@ if __name__ == "__main__":
         exit()
 
     # Configure and start Picamera2.
-    model_h, model_w = imx500.get_input_size()
-    video_w, video_h = v_width,v_height
-    main  = {'size': (video_w, video_h), 'format': 'YUV420'}
-    lores = {'size': (model_w, model_h), 'format': 'YUV420'}
-    picam2 = Picamera2(imx500.camera_num)
-    config = picam2.create_preview_configuration(main, lores=lores,controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12)
-    imx500.show_network_fw_progress_bar()
-    picam2.configure(config)
-    encoder = H264Encoder(bitrate=2000000)
-    pref = pre_frames * 1000
-    circular = CircularOutput2(buffer_duration_ms=pref)
-    picam2.start_preview(Preview.QTGL, x=ds, y=1, width=cw, height=ch)
-    picam2.start_recording(encoder, circular)
-    if intrinsics.preserve_aspect_ratio:
-        imx500.set_auto_aspect_ratio()
-
-    last_results = None
-    picam2.pre_callback = draw_detections
+    start_buffer()
             
-            # Process each low resolution camera frame.
+    # Process each low resolution camera frame.
     while True:
                 last_results = parse_detections(picam2.capture_metadata())
                 # Get free ram space
@@ -535,58 +553,67 @@ if __name__ == "__main__":
                 # Capture frame
                 frame = picam2.capture_array('lores')
                 frame = cv2.cvtColor(frame, cv2.COLOR_YUV420p2RGB)
+                frame = frame[0:model_h, 0:model_w] 
 
                 # detected label
                 if mrecord == 1:
                     value = 0
                     label = "m"
                     category = "m"
-                elif len(label) > 1:    
+                elif len(label) > 1: 
                     data = label.split("(")
                     category = data[0][:-1]
                     value = data[1][:-1]
+                else:
+                    value = 0
+                    label = "n"
+                    category = "n"
                  
                 # detection
                 if category in objects and float(value) > threshold or mrecord == 1:
-                        startrec = time.monotonic()
-                        startrec = time.monotonic()
-                        startmp4 = time.monotonic()
-                        mrecord = 0
-                        text(5,13,0,6,"________")
-                        text(5,13,2,6,"________")
-                        text(5,13,1,5,"Recording")
-                        if log == 1:
-                                now = datetime.datetime.now()
-                                timestamp = now.strftime("%y%m%d_%H%M%S")
-                                with open("detect_log.txt", 'a') as f:
-                                    f.write(timestamp + " " + objects[d] + "\n" )
-                        # start recording
-                        if not encoding and freeram > ram_limit:
-                                now = datetime.datetime.now()
-                                timestamp = now.strftime("%y%m%d_%H%M%S")
-                                circular.open_output(PyavOutput("/run/shm/" + timestamp +".mp4"))
-                                encoding = True
-                                print("New  Detection",timestamp + " " + label)
-                                rec_led.on()
-                                # save lores image
-                                cv2.imwrite(h_user + "/Pictures/" + str(timestamp) + ".jpg",frame)
-                                # show captured lores trigger image
-                                Pics = glob.glob(h_user + '/Pictures/*.jpg')
-                                Pics.sort()
-                                p = len(Pics) - 1
-                                img = cv2.cvtColor(frame,cv2.COLOR_RGB2BGR)
-                                image = pygame.surfarray.make_surface(img)
-                                image = pygame.transform.scale(image,(rw,rh))
-                                image = pygame.transform.rotate(image,int(90))
-                                image = pygame.transform.flip(image,0,1)
-                                windowSurfaceObj.blit(image,(0,bh))
-                                text(0,13,1,4,str(p+1) + "/" + str(p+1))
-                                pic = Pics[p].split("/")
-                                text(0,12,1,4,str(pic[4]))
-                                pygame.display.update()
+                    startrec = time.monotonic()
+                    startmp4 = time.monotonic()
+                    mrecord = 0
+                    text(1,13,0,5,"Recording")
+                    if log == 1:
+                        now = datetime.datetime.now()
+                        timestamp = now.strftime("%y%m%d_%H%M%S")
+                        with open("detect_log.txt", 'a') as f:
+                            f.write(timestamp + " " + objects[d] + "\n" )
+                    # start recording
+                    if not encoding and freeram > ram_limit:
+                        old_label = label
+                        sta = time.monotonic()
+                        now = datetime.datetime.now()
+                        timestamp = now.strftime("%y%m%d_%H%M%S")
+                        circular.open_output(PyavOutput("/run/shm/" + timestamp +".mp4"))
+                        encoding = True
+                        print("New  Detection",timestamp + " " + label)
+                        rec_led.on()
+                        # save lores image
+                        cv2.imwrite(h_user + "/Pictures/" + str(timestamp) + ".jpg",frame)
+                        # show captured lores trigger image
+                        Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                        Pics.sort()
+                        p = len(Pics) - 1
+                        img = cv2.cvtColor(frame,cv2.COLOR_RGB2BGR)
+                        image = pygame.surfarray.make_surface(img)
+                        image = pygame.transform.scale(image,(rw,rh))
+                        image = pygame.transform.rotate(image,int(90))
+                        image = pygame.transform.flip(image,0,1)
+                        windowSurfaceObj.blit(image,(0,bh))
+                        text(0,13,1,4,str(p+1) + "/" + str(p+1))
+                        pic = Pics[p].split("/")
+                        text(0,12,1,4,str(pic[4]))
+                        pygame.display.update()
 
+                # show recording time                   
+                if encoding:
+                    td = timedelta(seconds=int(time.monotonic()-sta))
+                    text(1,13,2,3,str(td))
+                    
                 # stop recording, if time out or low RAM
-                if encoding and (time.monotonic() - startrec > v_length + pre_frames or freeram <= ram_limit):
+                if encoding and ((time.monotonic() - startrec > v_length + pre_frames) or freeram <= ram_limit):
                     now = datetime.datetime.now()
                     timestamp2 = now.strftime("%y%m%d_%H%M%S")
                     print("Stopped Record", timestamp2)
@@ -595,9 +622,10 @@ if __name__ == "__main__":
                     startmp4 = time.monotonic()
                     rec_led.off()
                     text(0,12,1,4,str(pic[4][:-4] + ".mp4"))
-                    text(5,13,1,4,"          ")
-                    text(5,13,0,4,"          ")
-                    text(5,13,2,4,"          ")
+                    text(1,13,0,3,"       ")
+                    text(1,13,2,3,"       ")
+                    text(1,13,1,3,"RECORD")
+                    old_label = ""
 
                 # move mp4s
                 if time.monotonic() - startmp4 > mp4_timer and not encoding:
@@ -765,6 +793,21 @@ if __name__ == "__main__":
                                 v_length -=1
                                 v_length = max(v_length,5)
                             text(4,13,2,4,str(v_length))
+                            
+                        # Video Bitrate
+                        elif bcol == 5 and brow == 13:
+                            if event.button == 3 or event.button == 4:
+                                bitrate1 +=1
+                            else:
+                                bitrate1 -=1
+                                bitrate1 = max(bitrate1,1)
+                            text(5,13,2,4,str(bitrate1))
+                            bitrate2 = bitrate1 * 1000000
+                            # stop circular buffer
+                            picam2.close()
+                            picam2.stop()
+                            # restart circular buffer
+                            start_buffer()
                                                     
                         # camera control
                         # EV
@@ -1272,6 +1315,7 @@ if __name__ == "__main__":
                         defaults[13] = sd_mins
                         defaults[14] = pre_frames
                         defaults[15] = v_length 
+                        defaults[16] = bitrate1
                         
                         with open(config_file, 'w') as f:
                             for item in defaults:
