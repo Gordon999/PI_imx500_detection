@@ -19,7 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
-# v0.81
+# v0.82
 
 import argparse
 from functools import lru_cache
@@ -38,6 +38,7 @@ import datetime
 from datetime import timedelta
 import shutil
 from gpiozero import LED
+from gpiozero import PWMOutputDevice
 import pygame, sys
 from pygame.locals import *
 
@@ -51,8 +52,12 @@ objects = ["cat","bear","dog","person"]
 sd_hour      = 0     # if sd_hour = 0 and sd_mins = 0 won't shutdown
 sd_mins      = 0
 
+# buzzer
+e_buzz       = 12    # gpio ouput for buzzer
+use_buzz     = 1     # sound buzzer on capture, 0 off, 1 on starting video, 2 on detection
+
 # set variables
-screen       = 2     # 1 = 1280 x 720, 2 = 800 x 480
+screen       = 1     # 1 = 1280 x 720, 2 = 800 x 480
 show_detects = 0     # show detections, 1 = yes, 0 = no
 log          = 0     # set to 1 to make a log of detections in detect_log.txt
 v_width      = 1080  # video width
@@ -91,6 +96,10 @@ thickness    = 2
 
 # ram limit
 ram_limit    = 150 # stops recording if ram below this
+
+# optional buzzer
+if use_buzz > 0:  
+    buzzer=PWMOutputDevice(e_buzz, initial_value=0,frequency=4000)
 
 # setup screen parameters
 if screen == 1: # 1280 x 720
@@ -235,7 +244,6 @@ Pics.sort()
 record = 0
 sd_tim = (sd_hour * 60) + sd_mins
 mrecord = 0
-old_label = ""
 
 # check if clock synchronised
 if "System clock synchronized: yes" in os.popen("timedatectl").read().split("\n"):
@@ -575,6 +583,11 @@ if __name__ == "__main__":
                     startmp4 = time.monotonic()
                     mrecord = 0
                     text(1,13,0,5,"Recording")
+                    # sound buzzer
+                    if use_buzz == 2:
+                        buzzer.value = 0.01
+                        time.sleep(0.2)
+                        buzzer.value = 0
                     if log == 1:
                         now = datetime.datetime.now()
                         timestamp = now.strftime("%y%m%d_%H%M%S")
@@ -590,6 +603,9 @@ if __name__ == "__main__":
                         encoding = True
                         print("New  Detection",timestamp + " " + label)
                         rec_led.on()
+                        # sound buzzer
+                        if use_buzz == 1:
+                            buzzer.value = 0.01
                         # save lores image
                         cv2.imwrite(h_user + "/Pictures/" + str(timestamp) + ".jpg",frame)
                         # show captured lores trigger image
@@ -606,6 +622,8 @@ if __name__ == "__main__":
                         pic = Pics[p].split("/")
                         text(0,12,1,4,str(pic[4]))
                         pygame.display.update()
+                        if use_buzz == 1:
+                            buzzer.value = 0
 
                 # show recording time                   
                 if encoding:
@@ -625,7 +643,6 @@ if __name__ == "__main__":
                     text(1,13,0,3,"       ")
                     text(1,13,2,3,"       ")
                     text(1,13,1,3,"RECORD")
-                    old_label = ""
 
                 # move mp4s
                 if time.monotonic() - startmp4 > mp4_timer and not encoding:
