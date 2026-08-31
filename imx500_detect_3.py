@@ -19,7 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
-# v0.82
+# v0.83
 
 import argparse
 from functools import lru_cache
@@ -244,6 +244,9 @@ Pics.sort()
 record = 0
 sd_tim = (sd_hour * 60) + sd_mins
 mrecord = 0
+zoom = 0
+xo = 0
+yo = 0
 
 # check if clock synchronised
 if "System clock synchronized: yes" in os.popen("timedatectl").read().split("\n"):
@@ -261,8 +264,8 @@ if screen == 1:
 for y in range(1,6):
     button(y,13,bw,bh,0)
 
-text(0,0,1,5,"< PREV")
-text(1,0,1,5,"NEXT >")
+text(0,0,1,5,"PRE/NXT")
+text(1,0,1,5,"Zoom")
 if len(Pics) > 0:
     text(4,0,0,5,"Show")
     text(4,0,2,5,"Video")
@@ -562,6 +565,18 @@ if __name__ == "__main__":
                 frame = picam2.capture_array('lores')
                 frame = cv2.cvtColor(frame, cv2.COLOR_YUV420p2RGB)
                 frame = frame[0:model_h, 0:model_w] 
+                
+                # show zoomed image to assist focussing
+                if zoom == 1:
+                    frame2 = picam2.capture_array('main')
+                    img = cv2.cvtColor(frame2,cv2.COLOR_YUV420p2BGR)
+                    image = pygame.surfarray.make_surface(img)
+                    cropped = pygame.Surface((rw, rh))
+                    cropped.blit(image, (0, 0), (int((v_width/2)-(rw/2)) - xo, int((v_height/2)-(rh/2)) - yo, rw, rh))
+                    image = pygame.transform.rotate(cropped,int(90))
+                    image = pygame.transform.flip(image,0,1)
+                    windowSurfaceObj.blit(image,(0,bh))
+                    pygame.display.update()
 
                 # detected label
                 if mrecord == 1:
@@ -578,7 +593,7 @@ if __name__ == "__main__":
                     category = "n"
                  
                 # detection
-                if category in objects and float(value) > threshold or mrecord == 1:
+                if (category in objects and float(value) > threshold and zoom == 0) or mrecord == 1:
                     startrec = time.monotonic()
                     startmp4 = time.monotonic()
                     mrecord = 0
@@ -748,11 +763,22 @@ if __name__ == "__main__":
                             h = 1
                         if screen == 2 and brow > 11:
                             brow +=1
+                            
+                        # move zoom window
+                        if zoom == 1 and mousey > bh and mousey < bh + rh:
+                            if event.button == 3 or event.button == 4:
+                                yo -= int((mousex - int(rw/2))/4)
+                                xo -= int(((mousey-bh) - int(rh/2))/4)
+                            if event.button == 1 or event.button == 5:
+                                yo += int((mousex - int(rw/2))/4)
+                                xo += int(((mousey-bh) - int(rh/2))/4)
     
                         # RECORD VIDEO    
-                        if bcol == 1 and brow == 13:
+                        elif bcol == 1 and brow == 13:
                             if event.button == 3:
                                 mrecord = 1
+                                zoom = 0
+                                text(1,0,1,5,"Zoom")
                                 
                         elif bcol == 2 and brow == 13:
                             # SHUTDOWN TIME
@@ -1013,24 +1039,16 @@ if __name__ == "__main__":
                             text(4,15,2,4,str(red)[0:3])
                             text(5,15,2,4,str(blue)[0:3])
                             
-                        # show previous
+                        # show previous / next
                         elif bcol == 0 and brow == 0:
                             Pics = glob.glob(h_user + '/Pictures/*.jpg')
                             Pics.sort()
-                            p -= 1
-                            if p < 0:
-                                p = 0
-                            if len(Pics) > 0:
-                                image = pygame.image.load(Pics[p])
-                                image = pygame.transform.scale(image,(rw,rh))
-                                windowSurfaceObj.blit(image,(0,bh))
-                                pygame.display.update()
-                                
-                        # show next
-                        elif bcol == 1 and brow == 0:
-                            Pics = glob.glob(h_user + '/Pictures/*.jpg')
-                            Pics.sort()
-                            p += 1
+                            if h == 0:
+                                p -= 1
+                                if p < 0:
+                                   p = 0
+                            else:
+                                p += 1
                             if p > len(Pics)-1:
                                 p = len(Pics)-1
                             if len(Pics) > 0:
@@ -1038,6 +1056,15 @@ if __name__ == "__main__":
                                 image = pygame.transform.scale(image,(rw,rh))
                                 windowSurfaceObj.blit(image,(0,bh))
                                 pygame.display.update()
+                                
+                        # ZOOM
+                        elif bcol == 1 and brow == 0 and not encoding:
+                            zoom += 1
+                            if zoom > 1:
+                                zoom = 0
+                                text(1,0,1,5,"Zoom")
+                            else:
+                                text(1,0,1,4,"ZOOMED")
                                 
                         # delete picture and video
                         elif bcol == 2 and brow == 0 and event.button == 3:
