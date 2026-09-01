@@ -19,7 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
-# v0.84
+# v0.85
 
 import argparse
 from functools import lru_cache
@@ -54,7 +54,7 @@ sd_mins      = 0
 
 # buzzer
 e_buzz       = 12    # gpio ouput for buzzer
-use_buzz     = 1     # sound buzzer on capture, 0 off, 1 on starting video, 2 on detection
+use_buzz     = 0     # sound buzzer on capture, 0 off, 1 on 
 
 # set variables
 screen       = 1     # 1 = 1280 x 720, 2 = 800 x 480
@@ -86,7 +86,6 @@ blue         = 10    # set blue, only in awb custom mode
 modes        = ['manual','normal','short','long']
 meters       = ["Center","Spot","Matrix"]
 awbs         = ['auto','tungsten','fluorescent','indoor','daylight','cloudy','custom']
-sensor_mode  = 0
 
 # mp4_annotation parameters
 colour       = (255, 255, 255)
@@ -99,8 +98,7 @@ thickness    = 2
 ram_limit    = 150 # stops recording if ram below this
 
 # optional buzzer
-if use_buzz > 0:  
-    buzzer=PWMOutputDevice(e_buzz, initial_value=0,frequency=4000)
+buzzer=PWMOutputDevice(e_buzz, initial_value=0,frequency=4000)
 
 # setup screen parameters
 if screen == 1: # 1280 x 720
@@ -134,9 +132,9 @@ windowSurfaceObj = pygame.display.set_mode((rw,ch),1, 24)
 pygame.display.set_caption("Review Captures" )
 
 # check Det_configXX.txt exists, if not then write default values
-config_file = "Det_Config6.txt"
+config_file = "Det_Config7.txt"
 if not os.path.exists(config_file):
-    defaults = [mode,speed,gain,meter,brightness,contrast,ev,sharpness,saturation,awb,red,blue,sd_hour,sd_mins,pre_frames,v_length,bitrate1]
+    defaults = [mode,speed,gain,meter,brightness,contrast,ev,sharpness,saturation,awb,red,blue,sd_hour,sd_mins,pre_frames,v_length,bitrate1,use_buzz]
     with open(config_file, 'w') as f:
         for item in defaults:
             f.write("%s\n" % item)
@@ -166,6 +164,7 @@ sd_mins    = defaults[13]
 pre_frames = defaults[14]
 v_length   = defaults[15]
 bitrate    = defaults[16]
+use_buzz   = defaults[17]
 
 bitrate2 = bitrate1 * 1000000
 
@@ -248,6 +247,7 @@ mrecord = 0
 zoom = 0
 xo = 0
 yo = 0
+sensor_mode  = 0
 
 # check if clock synchronised
 if "System clock synchronized: yes" in os.popen("timedatectl").read().split("\n"):
@@ -291,6 +291,9 @@ if awb == 6:
 if mode == 0:
     text(2,14,0,5,"Speed")
     text(2,14,2,4,str(speed))
+else:
+    text(2,14,0,5,"Bitrate")
+    text(2,14,2,4,str(bitrate))
 text(3,14,0,5,"Gain")
 if gain != 0:
     text(3,14,2,4,str(gain))
@@ -314,8 +317,11 @@ text(3,13,0,5,"Pre S")
 text(3,13,2,4,str(pre_frames))
 text(4,13,0,5,"Video S")
 text(4,13,2,4,str(v_length))
-text(5,13,0,5,"Bitrate")
-text(5,13,2,4,str(bitrate1))
+text(5,13,0,5,"Buzzer")
+if use_buzz == 1:
+    text(5,13,2,4,"ON")
+else:
+    text(5,13,2,4,"OFF")
 time.sleep(10)
 
 # show last captured image
@@ -497,7 +503,7 @@ def get_args():
     return parser.parse_args()
  
 def start_buffer():
-    global imx500,v_width,vheight,picam2,config,encoder,pref,pre_frames,bitrate2,cw,ch,circular,last_results,draw_detections,model_h,model_w,sensor_mode,zoom
+    global imx500,v_width,vheight,picam2,config,encoder,pref,pre_frames,bitrate2,cw,ch,circular,last_results,draw_detections,model_h,model_w,sensor_mode,zoom,xo,yo
     # Configure and start Picamera2.
     model_h, model_w = imx500.get_input_size()
     video_w, video_h = v_width,v_height
@@ -519,7 +525,7 @@ def start_buffer():
     last_results = None
     picam2.pre_callback = draw_detections
     if zoom > 0:
-        offset = [int((4056/2) - (v_width/2)),int((3040/2) - (v_height/2))]
+        offset = [int((4056/2) - (v_width/2)) + xo,int((3040/2) - (v_height/2)) + yo]
         size = [v_width,v_height]
         picam2.set_controls({"ScalerCrop": offset + size})
     
@@ -595,11 +601,6 @@ if __name__ == "__main__":
                     startmp4 = time.monotonic()
                     mrecord = 0
                     text(1,13,0,5,"Recording")
-                    # sound buzzer
-                    if use_buzz == 2:
-                        buzzer.value = 0.01
-                        time.sleep(0.2)
-                        buzzer.value = 0
                     if log == 1:
                         now = datetime.datetime.now()
                         timestamp = now.strftime("%y%m%d_%H%M%S")
@@ -760,15 +761,6 @@ if __name__ == "__main__":
                             h = 1
                         if screen == 2 and brow > 11:
                             brow +=1
-                            
-                        # move zoom window
-                        if zoom > 0 and mousey > bh and mousey < bh + rh:
-                            if event.button == 3 or event.button == 4:
-                                yo -= int((mousex - int(rw/2))/4)
-                                xo -= int(((mousey-bh) - int(rh/2))/4)
-                            if event.button == 1 or event.button == 5:
-                                yo += int((mousex - int(rw/2))/4)
-                                xo += int(((mousey-bh) - int(rh/2))/4)
     
                         # RECORD VIDEO    
                         elif bcol == 1 and brow == 13:
@@ -832,21 +824,7 @@ if __name__ == "__main__":
                                 v_length = max(v_length,5)
                             text(4,13,2,4,str(v_length))
                             
-                        # Video Bitrate
-                        elif bcol == 5 and brow == 13:
-                            if event.button == 3 or event.button == 4:
-                                bitrate1 +=1
-                            else:
-                                bitrate1 -=1
-                                bitrate1 = max(bitrate1,1)
-                            text(5,13,2,4,str(bitrate1))
-                            bitrate2 = bitrate1 * 1000000
-                            # stop circular buffer
-                            picam2.close()
-                            picam2.stop()
-                            # restart circular buffer
-                            start_buffer()
-                                                    
+                                                                           
                         # camera control
                         # EV
                         elif bcol == 0 and brow == 14:
@@ -883,8 +861,8 @@ if __name__ == "__main__":
                                     picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Short,"AnalogueGain": gain})
                                 elif mode == 3:
                                     picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Long,"AnalogueGain": gain})
-                                text(2,14,0,5," ")
-                                text(2,14,2,4," ")
+                                text(2,14,0,5,"Bitrate")
+                                text(2,14,2,4,str(bitrate))
                                 
                         # METER MODE
                         elif bcol == 0 and brow == 15:
@@ -904,7 +882,7 @@ if __name__ == "__main__":
                                  picam2.set_controls({"AeMeteringMode": controls.AeMeteringModeEnum.Matrix})
                             text(0,15,2,4,str(meters[meter]))
                             
-                        # SHUTTER SPEED
+                        # SHUTTER SPEED / BITRATE
                         elif bcol == 2 and brow == 14 and mode == 0:
                             if event.button == 3 or event.button == 4:
                                 speed += 1000
@@ -914,6 +892,21 @@ if __name__ == "__main__":
                                 speed = max(1000,speed)
                             picam2.set_controls({"AeEnable": False,"ExposureTime": speed,"AnalogueGain": gain})
                             text(2,14,2,4,str(speed))
+                        elif bcol == 2 and brow == 14 and mode != 0:
+                            if event.button == 3 or event.button == 4:
+                                bitrate += 1
+                                bitrate = min(20,bitrate)
+                            else:
+                                bitrate -=1
+                                bitrate = max(1,bitrate)
+                            bitrate2 = bitrate * 1000000
+                            # stop circular buffer
+                            picam2.close()
+                            picam2.stop()
+                            # restart circular buffer
+                            start_buffer()
+                            save_config = 1
+                            text(2,14,2,4,str(bitrate))
                             
                         # GAIN
                         elif bcol == 3 and brow == 14:
@@ -940,6 +933,18 @@ if __name__ == "__main__":
                             picam2.set_controls({"Brightness": brightness/10})
                             text(4,14,2,4,str(brightness))
                         
+                        # Buzzer ON/OFF
+                        elif bcol == 5 and brow == 13 :
+                            if event.button == 3 or event.button == 4:
+                                use_buzz = 1
+                                text(5,13,2,4,"ON")
+                                buzzer.value = 0.01
+                                time.sleep(0.5)
+                                buzzer.value = 0
+                            else:
+                                use_buzz = 0
+                                text(5,13,2,4,"OFF")
+                                
                         # CONTRAST
                         elif bcol == 5 and brow == 14:
                             if event.button == 3 or event.button == 4:
@@ -1363,6 +1368,7 @@ if __name__ == "__main__":
                         defaults[14] = pre_frames
                         defaults[15] = v_length 
                         defaults[16] = bitrate1
+                        defaults[17] = use_buzz
                         
                         with open(config_file, 'w') as f:
                             for item in defaults:
