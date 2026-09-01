@@ -23,3 +23,5 @@ Videos saved to ram and then copied to /home/USERNAME/Videos
 stills saved to /home/USER/Pictures
 
 to run ... python3 imx500_detect_3.py
+
+Zoom will crop the centre of the image, zoom(25) means cropped at 25fps, zoom(10) means cropped at 10fps at better resolution.
