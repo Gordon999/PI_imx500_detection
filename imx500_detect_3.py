@@ -19,7 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
-# v0.83
+# v0.84
 
 import argparse
 from functools import lru_cache
@@ -64,7 +64,7 @@ v_width      = 1080  # video width
 v_height     = 1080  # video height
 v_length     = 15    # seconds, minimum video length
 pre_frames   = 5     # seconds, defines length of pre-detection buffer
-fps          = 30    # video frame rate
+fps          = 25    # video frame rate
 bitrate1     = 8     # video bitrate in MB
 mp4_timer    = 10    # seconds, move mp4s to SD card after this time if no detections
 mp4_anno     = 1     # show timestamps on video, 1 = yes, 0 = no
@@ -86,6 +86,7 @@ blue         = 10    # set blue, only in awb custom mode
 modes        = ['manual','normal','short','long']
 meters       = ["Center","Spot","Matrix"]
 awbs         = ['auto','tungsten','fluorescent','indoor','daylight','cloudy','custom']
+sensor_mode  = 0
 
 # mp4_annotation parameters
 colour       = (255, 255, 255)
@@ -496,15 +497,17 @@ def get_args():
     return parser.parse_args()
  
 def start_buffer():
-    global imx500,v_width,vheight,picam2,config,encoder,pref,pre_frames,bitrate2,cw,ch,circular,last_results,draw_detections,model_h,model_w
+    global imx500,v_width,vheight,picam2,config,encoder,pref,pre_frames,bitrate2,cw,ch,circular,last_results,draw_detections,model_h,model_w,sensor_mode,zoom
     # Configure and start Picamera2.
     model_h, model_w = imx500.get_input_size()
     video_w, video_h = v_width,v_height
     main  = {'size': (video_w, video_h), 'format': 'YUV420'}
     lores = {'size': (model_w, model_h), 'format': 'YUV420'}
     picam2 = Picamera2(imx500.camera_num)
-    config = picam2.create_preview_configuration(main, lores=lores,controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12)
-    imx500.show_network_fw_progress_bar()
+    if zoom > 0:
+        config = picam2.create_preview_configuration(main, lores=lores,controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12,raw=picam2.sensor_modes[sensor_mode])
+    else:
+        config = picam2.create_preview_configuration(main, lores=lores,controls={"FrameRate": intrinsics.inference_rate}, buffer_count=12)
     picam2.configure(config)
     encoder = H264Encoder(bitrate=bitrate2)
     pref = pre_frames * 1000
@@ -515,6 +518,10 @@ def start_buffer():
         imx500.set_auto_aspect_ratio()
     last_results = None
     picam2.pre_callback = draw_detections
+    if zoom > 0:
+        offset = [int((4056/2) - (v_width/2)),int((3040/2) - (v_height/2))]
+        size = [v_width,v_height]
+        picam2.set_controls({"ScalerCrop": offset + size})
     
 # main loop
 if __name__ == "__main__":
@@ -532,7 +539,7 @@ if __name__ == "__main__":
     elif intrinsics.task != "object detection":
         print("Network is not an object detection task", file=sys.stderr)
         exit()
-
+      
     # Override intrinsics from args
     for key, value in vars(args).items():
         if key == 'labels' and value is not None:
@@ -552,6 +559,8 @@ if __name__ == "__main__":
         exit()
 
     # Configure and start Picamera2.
+    # Load imx500 software
+    imx500.show_network_fw_progress_bar()
     start_buffer()
             
     # Process each low resolution camera frame.
@@ -566,18 +575,6 @@ if __name__ == "__main__":
                 frame = cv2.cvtColor(frame, cv2.COLOR_YUV420p2RGB)
                 frame = frame[0:model_h, 0:model_w] 
                 
-                # show zoomed image to assist focussing
-                if zoom == 1:
-                    frame2 = picam2.capture_array('main')
-                    img = cv2.cvtColor(frame2,cv2.COLOR_YUV420p2BGR)
-                    image = pygame.surfarray.make_surface(img)
-                    cropped = pygame.Surface((rw, rh))
-                    cropped.blit(image, (0, 0), (int((v_width/2)-(rw/2)) - xo, int((v_height/2)-(rh/2)) - yo, rw, rh))
-                    image = pygame.transform.rotate(cropped,int(90))
-                    image = pygame.transform.flip(image,0,1)
-                    windowSurfaceObj.blit(image,(0,bh))
-                    pygame.display.update()
-
                 # detected label
                 if mrecord == 1:
                     value = 0
@@ -749,7 +746,7 @@ if __name__ == "__main__":
                             time.sleep(5)
                             # shutdown
                             print("SHUTDOWN")
-                            os.system("sudo shutdown -h now")
+                            os.system("shutdown -h now")
 
                 #check for any mouse button presses
                 for event in pygame.event.get():
@@ -765,7 +762,7 @@ if __name__ == "__main__":
                             brow +=1
                             
                         # move zoom window
-                        if zoom == 1 and mousey > bh and mousey < bh + rh:
+                        if zoom > 0 and mousey > bh and mousey < bh + rh:
                             if event.button == 3 or event.button == 4:
                                 yo -= int((mousex - int(rw/2))/4)
                                 xo -= int(((mousey-bh) - int(rh/2))/4)
@@ -777,8 +774,6 @@ if __name__ == "__main__":
                         elif bcol == 1 and brow == 13:
                             if event.button == 3:
                                 mrecord = 1
-                                zoom = 0
-                                text(1,0,1,5,"Zoom")
                                 
                         elif bcol == 2 and brow == 13:
                             # SHUTDOWN TIME
@@ -1060,11 +1055,19 @@ if __name__ == "__main__":
                         # ZOOM
                         elif bcol == 1 and brow == 0 and not encoding:
                             zoom += 1
-                            if zoom > 1:
+                            if zoom > 2:
                                 zoom = 0
                                 text(1,0,1,5,"Zoom")
+                            elif zoom == 1:
+                                text(1,0,1,4,"Zoom(" + str(fps) +")")
                             else:
-                                text(1,0,1,4,"ZOOMED")
+                                text(1,0,1,4,"Zoom(10)")
+                            # stop circular buffer
+                            sensor_mode = zoom - 1
+                            picam2.close()
+                            picam2.stop()
+                            # restart circular buffer
+                            start_buffer()
                                 
                         # delete picture and video
                         elif bcol == 2 and brow == 0 and event.button == 3:
